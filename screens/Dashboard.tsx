@@ -5,7 +5,7 @@ import { Button } from '../components/Button';
 import { identifyIngredientsFromImage, generateRecipes } from '../services/geminiService';
 import { 
   Camera, Search, Plus, X, Sparkles, Clock, BarChart, 
-  CheckCircle, Star, Quote, AlertCircle, ChefHat, ExternalLink, Bookmark, Globe
+  CheckCircle, Star, Quote, AlertCircle, ChefHat, ExternalLink, Bookmark, Globe, Utensils
 } from 'lucide-react';
 
 interface Props {
@@ -106,7 +106,7 @@ export const Dashboard: React.FC<Props> = ({ prefs }) => {
   const [filters, setFilters] = useState<FilterState>({
     time: '30',
     effort: 'minimal',
-    meal: 'dinner',
+    meal: 'Dinner',
     cuisine: ''
   });
 
@@ -354,6 +354,28 @@ export const Dashboard: React.FC<Props> = ({ prefs }) => {
                     Constraints
                 </h2>
                 <div className="space-y-4">
+                    {/* Meal Type */}
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 block flex items-center gap-1">
+                            <Utensils className="w-3 h-3" /> Meal Type
+                        </label>
+                        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                            {['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Dessert'].map(m => (
+                                <button
+                                    key={m}
+                                    onClick={() => setFilters({...filters, meal: m})}
+                                    className={`px-4 py-2 rounded-full font-bold text-sm border whitespace-nowrap transition-colors ${
+                                        filters.meal === m 
+                                        ? 'bg-slate-900 text-white border-slate-900' 
+                                        : 'bg-white text-slate-600 border-slate-200 hover:border-orange-300'
+                                    }`}
+                                >
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     {/* Time */}
                     <div>
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 block">Time</label>
