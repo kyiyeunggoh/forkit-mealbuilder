@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '../components/Button';
 import { identifyIngredientsFromImage } from '../services/geminiService';
 import { Ingredient } from '../types';
-import { ArrowLeft, Check, X, Plus, Camera, Sparkles } from 'lucide-react';
+import { ArrowLeft, Check, X, Plus, Camera, Sparkles, AlertTriangle } from 'lucide-react';
 
 interface Props {
   onBack: () => void;
@@ -13,6 +13,7 @@ export const FridgeScan: React.FC<Props> = ({ onBack, onIngredientsFound }) => {
   const [image, setImage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [identifiedIngredients, setIdentifiedIngredients] = useState<Ingredient[]>([]);
+  const [isUnsafe, setIsUnsafe] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -30,8 +31,18 @@ export const FridgeScan: React.FC<Props> = ({ onBack, onIngredientsFound }) => {
 
   const analyzeImage = async (base64Data: string) => {
     setIsAnalyzing(true);
+    setIsUnsafe(false);
+    
     const ingredients = await identifyIngredientsFromImage(base64Data);
-    setIdentifiedIngredients(ingredients);
+    
+    // Check for safety flag from service
+    if (ingredients.length > 0 && ingredients[0].name === "ERROR_UNSAFE") {
+        setIsUnsafe(true);
+        setIdentifiedIngredients([]);
+    } else {
+        setIdentifiedIngredients(ingredients);
+    }
+    
     setIsAnalyzing(false);
   };
 
@@ -94,7 +105,22 @@ export const FridgeScan: React.FC<Props> = ({ onBack, onIngredientsFound }) => {
               )}
             </div>
 
-            {!isAnalyzing && identifiedIngredients.length > 0 && (
+            {/* ERROR: UNSAFE CONTENT */}
+            {!isAnalyzing && isUnsafe && (
+                <div className="flex-1 bg-white rounded-t-[2.5rem] text-slate-900 p-8 -mx-4 -mb-4 animate-slide-up shadow-[0_-10px_40px_rgba(0,0,0,0.2)] text-center">
+                    <div className="text-6xl mb-6">🫣</div>
+                    <h3 className="text-2xl font-extrabold text-slate-900 mb-2">Oh! That's not right.</h3>
+                    <p className="text-slate-500 font-medium mb-8">
+                        My sensors are blushing! I can't process that image. Let's stick to delicious food, shall we?
+                    </p>
+                    <Button onClick={() => { setImage(null); setIsUnsafe(false); fileInputRef.current?.click() }} fullWidth className="h-14 text-lg">
+                        Try Something Else
+                    </Button>
+                </div>
+            )}
+
+            {/* SUCCESS: INGREDIENTS FOUND */}
+            {!isAnalyzing && !isUnsafe && identifiedIngredients.length > 0 && (
               <div className="flex-1 bg-white rounded-t-[2.5rem] text-slate-900 p-8 -mx-4 -mb-4 animate-slide-up shadow-[0_-10px_40px_rgba(0,0,0,0.2)]">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-2xl font-extrabold flex items-center gap-2">
@@ -126,7 +152,9 @@ export const FridgeScan: React.FC<Props> = ({ onBack, onIngredientsFound }) => {
                 </div>
               </div>
             )}
-             {!isAnalyzing && identifiedIngredients.length === 0 && image && (
+            
+            {/* ERROR: NO FOOD FOUND */}
+            {!isAnalyzing && !isUnsafe && identifiedIngredients.length === 0 && image && (
                <div className="text-center mt-12 px-6">
                  <div className="text-6xl mb-4">👻</div>
                  <h3 className="text-xl font-bold mb-2">Ghost Kitchen?</h3>

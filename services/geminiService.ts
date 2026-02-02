@@ -1,7 +1,15 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { Ingredient, Recipe, UserPreferences, FilterState } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+// Safety settings to block harmful content
+const safetySettings = [
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
+];
 
 // 1. Identify Ingredients from Image (Fridge Scan)
 export const identifyIngredientsFromImage = async (base64Image: string): Promise<Ingredient[]> => {
@@ -17,8 +25,13 @@ export const identifyIngredientsFromImage = async (base64Image: string): Promise
             },
           },
           {
-            text: `Analyze this image of food/fridge. List the visible ingredients. 
-                   Return a JSON array where each item has "name" and "category" (produce, protein, pantry, dairy, other).
+            text: `Analyze this image of food/fridge. 
+                   SAFETY GUARDRAIL: 
+                   1. If the image contains nudity, gore, violence, or sexually explicit content, return [{"name": "ERROR_UNSAFE", "category": "other"}].
+                   2. If the image contains a living human or pet (dog, cat, etc.) as the main subject, return [{"name": "ERROR_UNSAFE", "category": "other"}].
+                   3. If there are no food items, return [].
+                   
+                   Otherwise, return a JSON array where each item has "name" and "category" (produce, protein, pantry, dairy, other).
                    Ignore non-food items. Be specific (e.g., "Red Bell Pepper" instead of "Pepper").`
           },
         ],
@@ -35,7 +48,8 @@ export const identifyIngredientsFromImage = async (base64Image: string): Promise
             },
             required: ["name", "category"]
           }
-        }
+        },
+        safetySettings: safetySettings
       }
     });
 
@@ -44,7 +58,8 @@ export const identifyIngredientsFromImage = async (base64Image: string): Promise
     return JSON.parse(text) as Ingredient[];
   } catch (error) {
     console.error("Gemini Vision Error:", error);
-    return [];
+    // Return unsafe error if it was likely a safety block
+    return [{ name: "ERROR_UNSAFE", category: "other" }];
   }
 };
 
@@ -77,16 +92,42 @@ export const generateRecipes = async (
 
       Task: Suggest 3-4 EXISTING, REAL recipes from reputable sources.
       
+      CRITICAL SAFETY & JAILBREAK CHECK:
+      You are a cooking assistant. You MUST refuse to generate recipes for:
+      1. Human beings, body parts, or cannibalism.
+      2. Household pets (dogs, cats, goldfish, etc.).
+      3. Toxic, poisonous, or non-edible items (bleach, tide pods, nuclear waste, poop).
+      4. NSFW, sexually explicit, or violent themes.
+      5. Hate speech or illicit drugs.
+      
+      If any of the above are detected in the 'Available Ingredients' or 'Cuisine' input:
+      RETURN A SINGLE JSON OBJECT in the array with:
+      - id: "safety-violation"
+      - title: "Oh! That's not right."
+      - description: "My chef hat spun off! 🎩💨 I can't cook with that. Let's try something more... edible? How about a nice pasta?"
+      - matchScore: 0
+      - timeMinutes: 0
+      - effort: "Minimal"
+      - rating: 5.0
+      - reviewCount: 0
+      - featuredOn: "Safety First"
+      - userSentiment: "Better safe than sorry!"
+      - ingredients: ["Common Sense"]
+      - missingIngredients: []
+      - searchQuery: "safe dinner recipes"
+      
+      OTHERWISE, Suggest 3-4 EXISTING, REAL recipes.
+      
       Reputable Sources to consider: 
       NYT Cooking, Bon Appétit, Serious Eats, BBC Good Food, Just One Cookbook, Food52, 
       Smitten Kitchen, The Woks of Life, Maangchi, RecipeTin Eats, Sally's Baking Addiction, 
       Cookie and Kate, Spend With Pennies.
 
-      CRITICAL RULES:
-      1. **Do NOT force the use of all ingredients.** Pick recipes that use the *core* ingredients well. It is better to use 2 ingredients perfectly than 10 ingredients poorly.
-      2. **Real Recipes Only.** The 'title' must be the exact name of a real recipe found online. Do not invent recipes.
-      3. **Adaptation.** In the 'description', explain specifically *why* this recipe works for the user and how to adapt it (e.g., "Use your [User Ingredient] as a substitute for [Original Ingredient]").
-      4. **Search Query.** Provide a 'searchQuery' that will definitely find this specific recipe on Google (e.g. "Smitten Kitchen tomato soup recipe").
+      RULES:
+      1. **Do NOT force the use of all ingredients.** Pick recipes that use the *core* ingredients well.
+      2. **Real Recipes Only.** The 'title' must be the exact name of a real recipe found online.
+      3. **Adaptation.** In the 'description', explain specifically *why* this recipe works.
+      4. **Search Query.** Provide a 'searchQuery' to find this recipe.
 
       Output JSON format only.
     `;
@@ -117,7 +158,8 @@ export const generateRecipes = async (
             },
             required: ["id", "title", "description", "matchScore", "rating", "reviewCount", "featuredOn", "ingredients", "searchQuery"]
           }
-        }
+        },
+        safetySettings: safetySettings
       }
     });
 
@@ -127,6 +169,20 @@ export const generateRecipes = async (
 
   } catch (error) {
     console.error("Gemini Recipe Error:", error);
-    return [];
+    // Fallback safe error
+    return [{
+      id: "error",
+      title: "Kitchen Hiccup",
+      description: "Something went wrong in the kitchen. Let's try again!",
+      matchScore: 0,
+      timeMinutes: 0,
+      effort: "Minimal",
+      rating: 0,
+      reviewCount: 0,
+      ingredients: [],
+      missingIngredients: [],
+      searchQuery: "easy recipes",
+      userSentiment: "Try again later"
+    }];
   }
 };
