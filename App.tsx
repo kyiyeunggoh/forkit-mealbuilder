@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Onboarding } from './screens/Onboarding';
 import { Dashboard } from './screens/Dashboard';
 import { Screen, UserPreferences } from './types';
+import { Analytics } from './services/analytics';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.ONBOARDING);
@@ -9,11 +10,17 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Initialize Analytics
+    Analytics.initialize();
+    
     // Check local storage for existing user
     const savedPrefs = localStorage.getItem('forkit_user_prefs');
     if (savedPrefs) {
       setPrefs(JSON.parse(savedPrefs));
       setCurrentScreen(Screen.DASHBOARD);
+      Analytics.trackPageView('/dashboard');
+    } else {
+      Analytics.trackPageView('/onboarding');
     }
     setLoading(false);
   }, []);
@@ -23,6 +30,9 @@ export default function App() {
     localStorage.setItem('forkit_user_prefs', JSON.stringify(newPrefs));
     setPrefs(newPrefs);
     setCurrentScreen(Screen.DASHBOARD);
+    
+    Analytics.trackOnboardingCompleted('signup');
+    Analytics.trackPageView('/dashboard');
   };
 
   if (loading) return null;

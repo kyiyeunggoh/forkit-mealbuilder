@@ -3,6 +3,7 @@ import { UserPreferences, Ingredient, FilterState, Recipe } from '../types';
 import { Logo } from '../components/Logo';
 import { Button } from '../components/Button';
 import { identifyIngredientsFromImage, generateRecipes } from '../services/geminiService';
+import { Analytics } from '../services/analytics';
 import { 
   Camera, Search, Plus, X, Sparkles, Clock, BarChart, 
   CheckCircle, Star, Quote, AlertCircle, ChefHat, ExternalLink, Bookmark, Globe, Utensils
@@ -76,6 +77,7 @@ const RecipeCard: React.FC<{
               href={getRecipeLink(recipe)} 
               target="_blank" 
               rel="noreferrer"
+              onClick={() => Analytics.trackRecipeClick(recipe.title, recipe.featuredOn || 'web')}
               className="flex-1 bg-slate-900 text-white rounded-xl py-3 font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/20"
             >
                 View Instructions <ExternalLink className="w-4 h-4" />
@@ -135,6 +137,7 @@ export const Dashboard: React.FC<Props> = ({ prefs }) => {
     const formatted = name.trim().toLowerCase();
     if (formatted && !ingredients.includes(formatted)) {
       setIngredients(prev => [...prev, formatted]);
+      Analytics.trackManualIngredientAdd(formatted);
     }
     setManualInput('');
   };
@@ -157,7 +160,18 @@ export const Dashboard: React.FC<Props> = ({ prefs }) => {
         const base64 = (reader.result as string).split(',')[1];
         const found = await identifyIngredientsFromImage(base64);
         
-        const names = found.map(i => i.name.toLowerCase());
+        // Safety check happens in service, but we check if we got a valid list
+        if (found.length > 0 && found[0].name === "ERROR_UNSAFE") {
+             Analytics.trackSafetyViolation('image');
+             // The component logic for scan is handled in FridgeScan.tsx usually, but this is the quick scan logic
+             // If we are in Dashboard quick scan, we need to handle unsafe here too, 
+             // BUT, the quick scan here uses the same service.
+             // For this Dashboard view, we simply filter out unsafe or show a small alert
+        } else {
+             Analytics.trackFridgeScan('success', found.length);
+        }
+
+        const names = found.filter(i => i.name !== "ERROR_UNSAFE").map(i => i.name.toLowerCase());
         setIngredients(prev => [...new Set([...prev, ...names])]);
         setScanningFridge(false);
         // Show the list after scan
@@ -173,6 +187,10 @@ export const Dashboard: React.FC<Props> = ({ prefs }) => {
       alert("Add at least one ingredient!");
       return;
     }
+    
+    // Analytics
+    Analytics.trackRecipeGeneration(vibe || 'none', filters);
+
     setLoadingRecipes(true);
     setRecipes([]); // Clear previous
     
@@ -182,6 +200,11 @@ export const Dashboard: React.FC<Props> = ({ prefs }) => {
     const results = await generateRecipes(ingredientObjects, prefs, vibe, filters);
     setRecipes(results);
     setLoadingRecipes(false);
+
+    // Check for text-based safety violation in results
+    if (results.length > 0 && results[0].id === 'safety-violation') {
+        Analytics.trackSafetyViolation('text');
+    }
 
     // Scroll to results
     setTimeout(() => {
@@ -197,6 +220,7 @@ export const Dashboard: React.FC<Props> = ({ prefs }) => {
       newSaved = savedRecipes.filter(r => r.id !== recipe.id);
     } else {
       newSaved = [...savedRecipes, { ...recipe, savedAt: Date.now() }];
+      Analytics.trackRecipeSaved(recipe.title);
     }
     setSavedRecipes(newSaved);
     localStorage.setItem('forkit_saved_recipes', JSON.stringify(newSaved));

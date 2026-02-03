@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '../components/Button';
 import { identifyIngredientsFromImage } from '../services/geminiService';
+import { Analytics } from '../services/analytics';
 import { Ingredient } from '../types';
 import { ArrowLeft, Check, X, Plus, Camera, Sparkles, AlertTriangle } from 'lucide-react';
 
@@ -39,8 +40,11 @@ export const FridgeScan: React.FC<Props> = ({ onBack, onIngredientsFound }) => {
     if (ingredients.length > 0 && ingredients[0].name === "ERROR_UNSAFE") {
         setIsUnsafe(true);
         setIdentifiedIngredients([]);
+        Analytics.trackSafetyViolation('image');
+        Analytics.trackFridgeScan('unsafe');
     } else {
         setIdentifiedIngredients(ingredients);
+        Analytics.trackFridgeScan('success', ingredients.length);
     }
     
     setIsAnalyzing(false);
